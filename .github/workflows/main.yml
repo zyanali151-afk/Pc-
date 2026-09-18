@@ -1,0 +1,40 @@
+name: Zyan Cloud PC (ngrok)
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    steps:
+      - name: Enable RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+      - name: Create User
+        run: |
+          New-LocalUser -Name "zyan" -Password (ConvertTo-SecureString "Horizons123!" -AsPlainText -Force)
+          Add-LocalGroupMember -Group "Administrators" -Member "zyan"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "zyan"
+          Write-Host "USERNAME: zyan"
+          Write-Host "PASSWORD: Horizons123!"
+      - name: Install ngrok
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip" -TimeoutSec 120
+          Expand-Archive -Path "ngrok.zip" -DestinationPath "C:\ngrok" -Force
+          C:\ngrok\ngrok.exe authtoken $env:NGROK_AUTHTOKEN
+          Write-Host "ngrok installed and authenticated"
+      - name: Start ngrok Tunnel
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389" -NoNewWindow
+          Start-Sleep -Seconds 5
+          $response = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels"
+          $tunnel = $response.tunnels[0].public_url
+          Write-Host "================================="
+          Write-Host "YOUR RDP ADDRESS IS: $tunnel"
+          Write-Host "USERNAME: zyan"
+          Write-Host "PASSWORD: Horizons123!"
+          Write-Host "================================="
+          if (-not $tunnel) { throw "ngrok tunnel failed to start" }
+      - name: Keep Alive
+        run: ping -t localhost
